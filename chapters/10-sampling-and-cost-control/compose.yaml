@@ -1,0 +1,87 @@
+services:
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.165.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel/collector.yaml:/etc/otelcol/config.yaml:ro
+    environment:
+      JAEGER_ENDPOINT: jaeger:4317
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "13133:13133"
+      - "8888:8888"
+
+  jaeger:
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.23.0
+    ports:
+      - "16686:16686"
+
+  prometheus:
+    image: prom/prometheus:v3.16.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-otlp-receiver
+      - --enable-feature=exemplar-storage
+    volumes:
+      - ./otel/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  loki:
+    image: grafana/loki:3.7.10
+    ports:
+      - "3100:3100"
+
+  grafana:
+    image: grafana/grafana:13.3.1
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./otel/grafana:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "3000:3000"
+
+  inventory:
+    build: services/inventory
+    ports:
+      - "8082:8082"
+    environment:
+      OTEL_SERVICE_NAME: inventory
+      OTEL_SEMCONV_STABILITY_OPT_IN: http,database
+      OTEL_EXPERIMENTAL_RESOURCE_DETECTORS: otel,host,os,process
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_RESOURCE_ATTRIBUTES: >-
+        service.namespace=pebble,service.version=1.4.0,deployment.environment.name=dev
+      OTEL_METRIC_EXPORT_INTERVAL: "5000"
+
+  orders:
+    build: services/orders
+    ports:
+      - "8081:8081"
+    environment:
+      SERVER_PORT: 8081
+      LOGGING_PATTERN_CONSOLE: "%d{HH:mm:ss} %-5level [%X{trace_id}] %logger{0} - %msg%n"
+      INVENTORY_URL: http://inventory:8082
+      OTEL_SERVICE_NAME: orders
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_RESOURCE_ATTRIBUTES: >-
+        service.namespace=pebble,service.version=2.1.0,deployment.environment.name=dev
+      OTEL_METRIC_EXPORT_INTERVAL: "5000"
+
+  storefront:
+    build: services/storefront
+    ports:
+      - "8080:8080"
+    environment:
+      ORDERS_URL: http://orders:8081
+      OTEL_SERVICE_NAME: storefront
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_RESOURCE_ATTRIBUTES: >-
+        service.namespace=pebble,service.version=3.0.2,deployment.environment.name=dev
+      OTEL_METRIC_EXPORT_INTERVAL: "5000"

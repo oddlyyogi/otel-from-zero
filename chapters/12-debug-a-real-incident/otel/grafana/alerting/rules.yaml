@@ -1,0 +1,30 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: shop
+    folder: Shop
+    interval: 10s
+    rules:
+      - uid: inventory-slow
+        title: Inventory is slow
+        condition: B
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: prometheus
+            model:
+              instant: true
+              expr: service:latency_ms:p95{service_name="inventory"}
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [250] }
+        for: 30s
+        noDataState: OK
+        labels:
+          severity: page
+        annotations:
+          summary: p95 latency of the inventory is above 250 ms

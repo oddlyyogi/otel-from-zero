@@ -1,0 +1,23 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+exporters:
+  load_balancing:
+    routing_key: traceID
+    protocol:
+      otlp:
+        tls:
+          insecure: true
+    resolver:
+      dns:
+        hostname: sampler
+        port: "4317"
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [load_balancing]

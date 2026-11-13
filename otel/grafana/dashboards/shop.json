@@ -1,0 +1,31 @@
+{
+  "uid": "shop",
+  "title": "Pebble Shop",
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "title": "Requests per second",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "service:requests:rate1m", "legendFormat": "{{service_name}}" }]
+    },
+    {
+      "title": "Error ratio",
+      "type": "timeseries",
+      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 16 },
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "service:errors:ratio1m", "legendFormat": "{{service_name}}" }]
+    },
+    {
+      "title": "p95 latency",
+      "type": "timeseries",
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 16 },
+      "fieldConfig": { "defaults": { "unit": "ms" } },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "service:latency_ms:p95", "legendFormat": "{{service_name}}" }]
+    }
+  ]
+}

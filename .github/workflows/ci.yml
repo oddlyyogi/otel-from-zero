@@ -1,0 +1,77 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  end-to-end:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Download the pinned Java agent
+        run: |
+          curl -fsSL -o services/orders/opentelemetry-javaagent.jar \
+            https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v2.33.1/opentelemetry-javaagent.jar
+          echo "e43a270df53c6f423e0ab157be9c27ccc01d5dc3232e162fe54777573db2f149  services/orders/opentelemetry-javaagent.jar" | sha256sum -c
+
+      - name: Build the orders service
+        run: mvn -q -B -f services/orders/pom.xml package -DskipTests
+
+      - name: Certificates, token and queue folder (as in chapter 13)
+        run: |
+          mkdir -p certs data/queue && chmod 777 data/queue
+          cd certs
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.crt -days 30 -subj "/CN=Pebble Shop CA"
+          openssl req -newkey rsa:2048 -nodes -keyout server.key -out server.csr -subj "/CN=localhost"
+          printf "subjectAltName=DNS:localhost,DNS:collector\n" > san.ext
+          openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 30 -extfile san.ext
+          chmod 644 server.key
+          cd .. && echo "SHOP_TOKEN=$(openssl rand -hex 16)" > .env
+
+      - name: Validate the Collector configuration
+        run: docker compose run --rm --no-deps collector validate --config=/etc/otelcol/config.yaml
+
+      - name: Start the shop
+        run: |
+          docker compose up -d --build
+          for p in 8080 8081 8082 13133 16686 3000; do
+            for i in $(seq 180); do curl -s -o /dev/null localhost:$p && break; sleep 1; done
+          done
+
+      - name: Buy something and check the traces arrived
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install -q -r tools/requirements.txt
+          T0=$(date +%s)
+          for i in 1 2 3; do TIER=gold .venv/bin/python tools/shopper.py mug:1; done
+          for i in $(seq 30); do
+            out=$(.venv/bin/python tools/traces.py $T0)
+            echo "$out"
+            case "$out" in 3\ traces*) exit 0;; esac
+            sleep 2
+          done
+          exit 1
+
+      - name: Send over TLS with the token
+        run: |
+          OTEL_EXPORTER_OTLP_ENDPOINT=https://localhost:4319 \
+          OTEL_EXPORTER_OTLP_CERTIFICATE=certs/ca.crt \
+          OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer%20$(cut -d= -f2 .env)" \
+            .venv/bin/python tools/shopper.py mug:1 2>&1 | tee tls.log
+          ! grep -q -E "Failed|error" tls.log
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --tail 80
+
+      - name: Stop
+        if: always()
+        run: docker compose down

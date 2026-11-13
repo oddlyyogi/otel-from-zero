@@ -1,0 +1,47 @@
+services:
+  jaeger:
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.23.0
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+
+  inventory:
+    build: services/inventory
+    ports:
+      - "8082:8082"
+    environment:
+      OTEL_SERVICE_NAME: inventory
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=dev
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+
+  orders:
+    build: services/orders
+    ports:
+      - "8081:8081"
+    environment:
+      SERVER_PORT: 8081
+      INVENTORY_URL: http://inventory:8082
+      OTEL_SERVICE_NAME: orders
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=dev
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none
+
+  storefront:
+    build: services/storefront
+    ports:
+      - "8080:8080"
+    environment:
+      ORDERS_URL: http://orders:8081
+      OTEL_SERVICE_NAME: storefront
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_NODE_DISABLED_INSTRUMENTATIONS: net,dns
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=dev
+      OTEL_METRICS_EXPORTER: none
+      OTEL_LOGS_EXPORTER: none

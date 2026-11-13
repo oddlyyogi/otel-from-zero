@@ -1,0 +1,105 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 80
+    spike_limit_percentage: 25
+  resource:
+    attributes:
+      - key: shop.region
+        value: eu-west
+        action: upsert
+  attributes/strip:
+    actions:
+      - key: network.peer.port
+        action: delete
+  redaction:
+    allow_all_keys: true
+    blocked_values:
+      - "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}"
+    summary: debug
+  filter/noise:
+    error_mode: ignore
+    traces:
+      span:
+        - 'IsMatch(name, "^middleware - ")'
+    logs:
+      log_record:
+        - 'instrumentation_scope.name == "werkzeug"'
+    metrics:
+      metric:
+        - 'IsMatch(name, "^jvm\\.")'
+  tail_sampling:
+    decision_wait: 5s
+    num_traces: 10000
+    policies:
+      - name: errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      - name: slow
+        type: latency
+        latency:
+          threshold_ms: 150
+      - name: gold-customers
+        type: string_attribute
+        string_attribute:
+          key: shop.customer.tier
+          values: [gold]
+      - name: some-of-the-rest
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 20
+  batch:
+    timeout: 2s
+
+exporters:
+  debug:
+    verbosity: basic
+  otlp_grpc/jaeger:
+    endpoint: ${env:JAEGER_ENDPOINT}
+    tls:
+      insecure: true
+  otlp_http/prometheus:
+    endpoint: http://prometheus:9090/api/v1/otlp
+  otlp_http/loki:
+    endpoint: http://loki:3100/otlp
+    sending_queue:
+      batch:
+        flush_timeout: 2s
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions: [health_check]
+  telemetry:
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, tail_sampling, filter/noise, redaction,
+                   attributes/strip, resource, batch]
+      exporters: [otlp_grpc/jaeger, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, filter/noise, resource, batch]
+      exporters: [otlp_http/prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, filter/noise, resource]
+      exporters: [otlp_http/loki]

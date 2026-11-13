@@ -1,0 +1,10 @@
+global:
+  evaluation_interval: 10s
+rule_files:
+  - /etc/prometheus/rules.yml
+otlp:
+  promote_resource_attributes:
+    - deployment.environment.name
+storage:
+  tsdb:
+    out_of_order_time_window: 30m

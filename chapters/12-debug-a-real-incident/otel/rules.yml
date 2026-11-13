@@ -1,0 +1,20 @@
+groups:
+  - name: red
+    interval: 10s
+    rules:
+      - record: service:requests:rate1m
+        expr: >-
+          sum by (service_name) (
+            rate(traces_span_metrics_calls_total{span_kind="SPAN_KIND_SERVER"}[1m]))
+      - record: service:errors:ratio1m
+        expr: >-
+          sum by (service_name) (
+            rate(traces_span_metrics_calls_total{span_kind="SPAN_KIND_SERVER",
+                 status_code="STATUS_CODE_ERROR"}[1m]))
+          / sum by (service_name) (
+            rate(traces_span_metrics_calls_total{span_kind="SPAN_KIND_SERVER"}[1m]))
+      - record: service:latency_ms:p95
+        expr: >-
+          histogram_quantile(0.95, sum by (le, service_name) (
+            rate(traces_span_metrics_duration_milliseconds_bucket{
+              span_kind="SPAN_KIND_SERVER"}[1m])))
