@@ -56,7 +56,7 @@ mkdir -p certs data/queue && chmod 777 data/queue
 cd certs
 openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.crt -days 30 -subj "/CN=Pebble Shop CA"
 openssl req -newkey rsa:2048 -nodes -keyout server.key -out server.csr -subj "/CN=localhost"
-printf "subjectAltName=DNS:localhost,DNS:collector\n" > san.ext
+printf "subjectAltName=DNS:localhost,DNS:collector\nauthorityKeyIdentifier=keyid,issuer\n" > san.ext
 openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 30 -extfile san.ext
 chmod 644 server.key
 cd ..
