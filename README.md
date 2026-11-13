@@ -54,9 +54,9 @@ mvn -q -f services/orders/pom.xml package -DskipTests
 # certificates, token and queue folder for the Collector (chapter 13)
 mkdir -p certs data/queue && chmod 777 data/queue
 cd certs
-openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.crt -days 30 -subj "/CN=Pebble Shop CA"
+openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.crt -days 30 -subj "/CN=Pebble Shop CA" -addext "keyUsage=critical,keyCertSign,cRLSign"
 openssl req -newkey rsa:2048 -nodes -keyout server.key -out server.csr -subj "/CN=localhost"
-printf "subjectAltName=DNS:localhost,DNS:collector\nauthorityKeyIdentifier=keyid,issuer\n" > san.ext
+printf "subjectAltName=DNS:localhost,DNS:collector\nauthorityKeyIdentifier=keyid,issuer\nextendedKeyUsage=serverAuth\n" > san.ext
 openssl x509 -req -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt -days 30 -extfile san.ext
 chmod 644 server.key
 cd ..
